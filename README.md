@@ -11,7 +11,7 @@ Nightwatch pushes events to Raven via a signed webhook. Raven verifies the signa
 | Nightwatch event | What Raven does in GitHub |
 | --- | --- |
 | `issue.opened` | Creates a new issue, stores a Nightwatch ↔ GitHub mapping |
-| `issue.reopened` | Reopens the mapped issue and adds a "this recurred" comment |
+| `issue.reopened` | Reopens the mapped issue and adds a "this recurred" comment (or creates a fresh issue if no mapping exists yet — e.g. the original predates Raven) |
 | `issue.resolved` | Adds a comment noting it was resolved — **leaves the issue open** |
 | `issue.ignored` | Adds a comment noting it was ignored — **leaves the issue open** |
 
@@ -107,6 +107,14 @@ php artisan queue:work
 ```
 
 (With the default `sync` queue connection it runs inline, but a real queue is recommended in production.)
+
+### Duplicate protection
+
+Duplicate webhook deliveries and job retries won't open a second GitHub issue for the same Nightwatch issue. Issue creation is serialized per Nightwatch issue id using an atomic [cache lock](https://laravel.com/docs/cache#atomic-locks), with the `raven_issue_links` unique index as the final backstop.
+
+The one residual gap is a process crash *after* GitHub accepts the new issue but *before* Raven records the link: a later retry can't see the orphaned issue and will create a fresh one. The unique index prevents a duplicate link row, not a duplicate issue on GitHub. This window is inherent to pairing a non-transactional external API call with a local write, and is the only path to a duplicate.
+
+This relies on your cache store supporting atomic locks — `redis`, `memcached`, `database`, `dynamodb`, `file`, and `array` all do. The only configuration that won't work is sharing the in-memory `array` store across separate worker processes (not a real-world setup). If you've pointed `CACHE_STORE` at something custom, make sure it implements `Illuminate\Contracts\Cache\LockProvider`.
 
 ## Testing
 

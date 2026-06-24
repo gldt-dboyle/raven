@@ -17,7 +17,14 @@ class VerifyNightwatchSignature
         abort_if(blank($secret), 500, 'Raven webhook signing secret not configured.');
 
         $expected = hash_hmac('sha256', $request->getContent(), $secret);
+
         $provided = (string) $request->header('Nightwatch-Signature', '');
+
+        // Accept both a bare hex digest and a "sha256=" prefixed form, since
+        // webhook providers differ on how they present the signature.
+        if (str_starts_with($provided, 'sha256=')) {
+            $provided = substr($provided, 7);
+        }
 
         abort_unless(hash_equals($expected, $provided), 403, 'Invalid Nightwatch Signature.');
 

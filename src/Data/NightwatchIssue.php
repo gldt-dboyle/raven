@@ -28,17 +28,12 @@ class NightwatchIssue
         return new self(
             id: (string) ($data['id'] ?? ''),
             ref: isset($data['ref']) ? (int) $data['ref'] : null,
-            type: $data['type'] ?? 'exception',
-            title: $data['title'] ?? 'Untitled issue',
-            status: $data['status'] ?? 'open',
-            priority: $data['priority'] ?? 'none',
-            url: $data['url'] ?? null,
-            details: $data['details'] ?? [],
+            type: (string) ($data['type'] ?? 'exception'),
+            title: (string) ($data['title'] ?? 'Untitled issue'),
+            status: (string) ($data['status'] ?? 'open'),
+            priority: (string) ($data['priority'] ?? 'none'),
+            url: isset($data['url']) ? (string) $data['url'] : null,
+            details: (array) ($data['details'] ?? []),
         );
-    }
-
-    public function isException(): bool
-    {
-        return $this->type === 'exception';
     }
 }

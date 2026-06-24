@@ -25,14 +25,14 @@ class NightwatchWebhookEvent
      */
     public static function fromArray(array $data): self
     {
-        $payload = $data['payload'] ?? [];
+        $payload = (array) ($data['payload'] ?? []);
 
         return new self(
-            event: NightwatchEventType::from($data['event']),
+            event: NightwatchEventType::from((string) ($data['event'] ?? '')),
             timestamp: (string) ($data['timestamp'] ?? ''),
-            issue: NightwatchIssue::fromArray($payload['issue'] ?? []),
-            environment: $payload['environment'] ?? [],
-            actor: $payload['actor'] ?? null,
+            issue: NightwatchIssue::fromArray((array) ($payload['issue'] ?? [])),
+            environment: (array) ($payload['environment'] ?? []),
+            actor: isset($payload['actor']) ? (array) $payload['actor'] : null,
         );
     }
 }

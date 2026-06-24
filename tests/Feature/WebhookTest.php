@@ -77,6 +77,35 @@ it('only comments on issue.resolved and never creates or closes', function () {
     Http::assertNotSent(fn (Request $request) => $request->method() === 'PATCH');
 });
 
+it('creates a fresh GitHub issue on issue.reopened when no link exists yet', function () {
+    postNightwatchWebhook(nightwatchPayload('issue.reopened', ['id' => 'uuid-reopen-new']))
+        ->assertOk();
+
+    expect(RavenIssueLink::query()->where('nightwatch_issue_id', 'uuid-reopen-new')->first())
+        ->not->toBeNull()
+        ->github_issue_number->toBe(42);
+
+    Http::assertSent(fn (Request $request) => $request->method() === 'POST'
+        && str_ends_with($request->url(), '/repos/acme/widgets/issues'));
+});
+
+it('does nothing on issue.resolved when no link exists', function () {
+    postNightwatchWebhook(nightwatchPayload('issue.resolved', ['id' => 'uuid-orphan']))
+        ->assertOk();
+
+    Http::assertNothingSent();
+    expect(RavenIssueLink::query()->count())->toBe(0);
+});
+
+it('acknowledges but ignores an unmapped event type', function () {
+    postNightwatchWebhook(nightwatchPayload('issue.snoozed'))
+        ->assertOk()
+        ->assertJson(['received' => true, 'ignored' => true]);
+
+    Http::assertNothingSent();
+    expect(RavenIssueLink::query()->count())->toBe(0);
+});
+
 it('does not create a duplicate when issue.opened arrives twice', function () {
     $payload = nightwatchPayload('issue.opened', ['id' => 'uuid-dupe']);
 

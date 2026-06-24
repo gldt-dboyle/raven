@@ -14,13 +14,17 @@ class TokenGitHubClient implements GitHubClient
         protected ?string $token,
         protected ?string $repository,
         protected string $apiUrl = 'https://api.github.com',
-    ) {}
+    ) {
+        throw_if(blank($token), new \RuntimeException('Raven GitHub token is not configured. Set RAVEN_GITHUB_TOKEN.'));
+        throw_if(blank($repository), new \RuntimeException('Raven GitHub repository is not configured. Set RAVEN_GITHUB_REPOSITORY.'));
+    }
 
     protected function request(): PendingRequest
     {
         return Http::baseUrl($this->apiUrl)
             ->withToken($this->token)
             ->acceptJson()
+            ->timeout(20)
             ->withHeaders([
                 'X-GitHub-Api-Version' => '2022-11-28',
                 'User-Agent' => 'gldt-raven',

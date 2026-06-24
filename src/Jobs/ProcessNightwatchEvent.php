@@ -14,12 +14,23 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Facades\Cache;
 
 class ProcessNightwatchEvent implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
+    public int $tries = 5;
+
     public function __construct(public readonly NightwatchWebhookEvent $event) {}
+
+    /**
+     * @return array<int, int>
+     */
+    public function backoff(): array
+    {
+        return [10, 30, 60];
+    }
 
     public function handle(GitHubClient $github, IssuePresenter $presenter): void
     {
@@ -52,18 +63,36 @@ class ProcessNightwatchEvent implements ShouldQueue
     {
         $issue = $this->event->issue;
 
-        $created = $github->createIssue(
-            $presenter->title($issue),
-            $presenter->body($this->event),
-            $presenter->labels($issue),
-        );
+        // Serialize creation per Nightwatch issue so duplicate webhook deliveries
+        // or overlapping retries can't each open a separate GitHub issue. The
+        // re-check inside the lock makes a second delivery a no-op, and the DB
+        // unique index on nightwatch_issue_id is the final backstop.
+        //
+        // TTL (120s) must comfortably exceed the GitHub call's own timeout (see
+        // TokenGitHubClient::request) so the lock can't lapse mid-callback and
+        // let a concurrent duplicate slip past the exists() check below.
+        //
+        // The block wait (25s) must in turn exceed that same GitHub timeout, so
+        // a duplicate arriving mid-create waits for the holder to finish and
+        // then no-ops on the re-check, rather than timing out and burning a retry.
+        Cache::lock('raven:create:'.$issue->id, 120)->block(25, function () use ($github, $presenter, $issue) {
+            if (RavenIssueLink::query()->where('nightwatch_issue_id', $issue->id)->exists()) {
+                return;
+            }
 
-        RavenIssueLink::query()->create([
-            'nightwatch_issue_id' => $issue->id,
-            'nightwatch_ref' => $issue->ref,
-            'github_issue_number' => $created['number'],
-            'github_node_id' => $created['node_id'],
-            'github_url' => $created['html_url'],
-        ]);
+            $created = $github->createIssue(
+                $presenter->title($issue),
+                $presenter->body($this->event),
+                $presenter->labels($issue),
+            );
+
+            RavenIssueLink::query()->create([
+                'nightwatch_issue_id' => $issue->id,
+                'nightwatch_ref' => $issue->ref,
+                'github_issue_number' => $created['number'],
+                'github_node_id' => $created['node_id'],
+                'github_url' => $created['html_url'],
+            ]);
+        });
     }
 }

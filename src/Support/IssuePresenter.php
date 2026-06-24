@@ -7,12 +7,14 @@ namespace Gldt\Raven\Support;
 use Gldt\Raven\Data\NightwatchIssue;
 use Gldt\Raven\Data\NightwatchWebhookEvent;
 use Gldt\Raven\Enums\NightwatchEventType;
+use Illuminate\Support\Str;
 
 class IssuePresenter
 {
     public function title(NightwatchIssue $issue): string
     {
-        return $issue->title;
+        // GitHub rejects titles longer than 256 characters.
+        return Str::limit($issue->title, 250);
     }
 
     /**
@@ -33,8 +35,8 @@ class IssuePresenter
         $lines = [
             '| Field | Value |',
             '| --- | --- |',
-            '| Type | '.$issue->type.' |',
-            '| Priority | '.$issue->priority.' |',
+            '| Type | '.$this->cell($issue->type).' |',
+            '| Priority | '.$this->cell($issue->priority).' |',
         ];
 
         if ($issue->ref !== null) {
@@ -42,7 +44,7 @@ class IssuePresenter
         }
 
         if ($name = $event->environment['name'] ?? null) {
-            $lines[] = '| Environment | '.$name.' |';
+            $lines[] = '| Environment | '.$this->cell((string) $name).' |';
         }
 
         foreach ($issue->details as $key => $value) {
@@ -50,7 +52,7 @@ class IssuePresenter
                 continue;
             }
 
-            $lines[] = '| '.ucfirst(str_replace('_', ' ', (string) $key)).' | '.$this->stringify($value).' |';
+            $lines[] = '| '.$this->cell(ucfirst(str_replace('_', ' ', (string) $key))).' | '.$this->cell($this->stringify($value)).' |';
         }
 
         if ($issue->url !== null) {
@@ -84,5 +86,14 @@ class IssuePresenter
     private function stringify(mixed $value): string
     {
         return is_array($value) ? implode(', ', $value) : (string) $value;
+    }
+
+    /**
+     * Escape a value for safe rendering inside a Markdown table cell —
+     * pipes would split the cell and newlines would break the row.
+     */
+    private function cell(string $value): string
+    {
+        return str_replace(['|', "\r\n", "\n", "\r"], ['\\|', ' ', ' ', ' '], $value);
     }
 }
