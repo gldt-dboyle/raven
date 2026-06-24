@@ -116,21 +116,54 @@ it('does not create a duplicate when issue.opened arrives twice', function () {
 });
 
 it('verifies a named source against its own secret and tags the issue', function () {
-    config()->set('raven.webhook.sources', ['prod' => 'prod-secret']);
+    config()->set('raven.webhook.sources', ['prod' => ['secret' => 'prod-secret']]);
 
     postNightwatchWebhook(nightwatchPayload('issue.opened', ['id' => 'uuid-prod']), 'prod-secret', 'prod')
         ->assertOk();
 
     expect(RavenIssueLink::query()->where('nightwatch_issue_id', 'uuid-prod')->first())
-        ->not->toBeNull();
+        ->not->toBeNull()
+        ->source->toBe('prod');
 
+    // No per-source repository configured, so it falls back to the default repo.
     Http::assertSent(fn (Request $request) => $request->method() === 'POST'
         && str_ends_with($request->url(), '/repos/acme/widgets/issues')
         && in_array('env:prod', $request->data()['labels'] ?? [], true));
 });
 
+it('files a named source into its own GitHub repository', function () {
+    config()->set('raven.webhook.sources', [
+        'billing' => ['secret' => 'billing-secret', 'repository' => 'acme/billing'],
+    ]);
+
+    postNightwatchWebhook(nightwatchPayload('issue.opened', ['id' => 'uuid-billing']), 'billing-secret', 'billing')
+        ->assertOk();
+
+    expect(RavenIssueLink::query()->where('nightwatch_issue_id', 'uuid-billing')->first())
+        ->source->toBe('billing');
+
+    Http::assertSent(fn (Request $request) => $request->method() === 'POST'
+        && str_ends_with($request->url(), '/repos/acme/billing/issues'));
+});
+
+it('keeps issues from different sources distinct even with the same Nightwatch id', function () {
+    config()->set('raven.webhook.sources', [
+        'billing' => ['secret' => 'billing-secret', 'repository' => 'acme/billing'],
+        'storefront' => ['secret' => 'storefront-secret', 'repository' => 'acme/storefront'],
+    ]);
+
+    postNightwatchWebhook(nightwatchPayload('issue.opened', ['id' => 'shared-id']), 'billing-secret', 'billing')
+        ->assertOk();
+    postNightwatchWebhook(nightwatchPayload('issue.opened', ['id' => 'shared-id']), 'storefront-secret', 'storefront')
+        ->assertOk();
+
+    expect(RavenIssueLink::query()->where('nightwatch_issue_id', 'shared-id')->count())->toBe(2);
+    expect(RavenIssueLink::query()->where('nightwatch_issue_id', 'shared-id')->pluck('source')->sort()->values()->all())
+        ->toBe(['billing', 'storefront']);
+});
+
 it('rejects a named source signed with the wrong secret', function () {
-    config()->set('raven.webhook.sources', ['prod' => 'prod-secret']);
+    config()->set('raven.webhook.sources', ['prod' => ['secret' => 'prod-secret']]);
 
     // Signed with the default secret, not prod's.
     postNightwatchWebhook(nightwatchPayload('issue.opened'), 'test-secret', 'prod')

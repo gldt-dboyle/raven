@@ -20,7 +20,7 @@ class VerifyNightwatchSignature
             $secret = config('raven.webhook.signing_secret');
             abort_if(blank($secret), 500, 'Raven webhook signing secret not configured.');
         } else {
-            $secret = config('raven.webhook.sources.'.$source);
+            $secret = config('raven.webhook.sources.'.$source.'.secret');
             abort_if(blank($secret), 404, 'Unknown Nightwatch webhook source.');
         }
 
