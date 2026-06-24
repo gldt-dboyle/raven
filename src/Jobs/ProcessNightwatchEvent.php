@@ -22,7 +22,10 @@ class ProcessNightwatchEvent implements ShouldQueue
 
     public int $tries = 5;
 
-    public function __construct(public readonly NightwatchWebhookEvent $event) {}
+    public function __construct(
+        public readonly NightwatchWebhookEvent $event,
+        public readonly ?string $source = null,
+    ) {}
 
     /**
      * @return array<int, int>
@@ -83,7 +86,7 @@ class ProcessNightwatchEvent implements ShouldQueue
             $created = $github->createIssue(
                 $presenter->title($issue),
                 $presenter->body($this->event),
-                $presenter->labels($issue),
+                $presenter->labels($issue, $this->source),
             );
 
             RavenIssueLink::query()->create([

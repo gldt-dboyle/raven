@@ -24,7 +24,7 @@ class NightwatchWebhookController
 
         $event = NightwatchWebhookEvent::fromArray($data);
 
-        ProcessNightwatchEvent::dispatch($event)
+        ProcessNightwatchEvent::dispatch($event, $request->route('source'))
             ->onConnection(config('raven.queue.connection'))
             ->onQueue(config('raven.queue.queue'));
 

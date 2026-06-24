@@ -20,12 +20,15 @@ class IssuePresenter
     /**
      * @return array<int, string>
      */
-    public function labels(NightwatchIssue $issue): array
+    public function labels(NightwatchIssue $issue, ?string $source = null): array
     {
         $default = (array) config('raven.labels.default', []);
         $typed = (array) config('raven.labels.'.$issue->type, []);
 
-        return array_values(array_unique([...$default, ...$typed]));
+        // Tag issues from a named source so a shared repo stays distinguishable.
+        $env = $source !== null ? ['env:'.$source] : [];
+
+        return array_values(array_unique([...$default, ...$typed, ...$env]));
     }
 
     public function body(NightwatchWebhookEvent $event): string

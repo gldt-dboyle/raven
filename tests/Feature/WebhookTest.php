@@ -114,3 +114,36 @@ it('does not create a duplicate when issue.opened arrives twice', function () {
 
     expect(RavenIssueLink::query()->where('nightwatch_issue_id', 'uuid-dupe')->count())->toBe(1);
 });
+
+it('verifies a named source against its own secret and tags the issue', function () {
+    config()->set('raven.webhook.sources', ['prod' => 'prod-secret']);
+
+    postNightwatchWebhook(nightwatchPayload('issue.opened', ['id' => 'uuid-prod']), 'prod-secret', 'prod')
+        ->assertOk();
+
+    expect(RavenIssueLink::query()->where('nightwatch_issue_id', 'uuid-prod')->first())
+        ->not->toBeNull();
+
+    Http::assertSent(fn (Request $request) => $request->method() === 'POST'
+        && str_ends_with($request->url(), '/repos/acme/widgets/issues')
+        && in_array('env:prod', $request->data()['labels'] ?? [], true));
+});
+
+it('rejects a named source signed with the wrong secret', function () {
+    config()->set('raven.webhook.sources', ['prod' => 'prod-secret']);
+
+    // Signed with the default secret, not prod's.
+    postNightwatchWebhook(nightwatchPayload('issue.opened'), 'test-secret', 'prod')
+        ->assertForbidden();
+
+    Http::assertNothingSent();
+});
+
+it('returns 404 for an unconfigured source', function () {
+    config()->set('raven.webhook.sources', []);
+
+    postNightwatchWebhook(nightwatchPayload('issue.opened'), 'whatever', 'ghost')
+        ->assertNotFound();
+
+    Http::assertNothingSent();
+});

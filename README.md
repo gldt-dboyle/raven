@@ -98,6 +98,29 @@ https://your-app.com/webhooks/nightwatch
 
 Set a signing secret and use the **same** value for `RAVEN_WEBHOOK_SECRET`. Raven verifies every request with an HMAC-SHA256 signature, so requests without a valid signature are rejected with a `403`.
 
+### Multiple environments (one install)
+
+You don't need a separate Raven deployment per environment. A single install can receive webhooks from several Nightwatch environments by adding a source segment to the path — `/webhooks/nightwatch/{source}` — with a distinct signing secret per source:
+
+```dotenv
+RAVEN_WEBHOOK_SOURCES=dev,staging,prod
+RAVEN_WEBHOOK_SECRET_DEV=secret-for-dev
+RAVEN_WEBHOOK_SECRET_STAGING=secret-for-staging
+RAVEN_WEBHOOK_SECRET_PROD=secret-for-prod
+```
+
+Then point each Nightwatch environment at its own URL:
+
+```
+https://your-app.com/webhooks/nightwatch/dev
+https://your-app.com/webhooks/nightwatch/staging
+https://your-app.com/webhooks/nightwatch/prod
+```
+
+Each request is verified against that source's secret; an unknown or unconfigured source is rejected with a `404`. All sources file into the same `RAVEN_GITHUB_REPOSITORY`, and issues are tagged with an `env:<source>` label so they stay distinguishable. The bare `/webhooks/nightwatch` path keeps working and uses `RAVEN_WEBHOOK_SECRET`.
+
+Adding an environment is just two `.env` lines (a name in `RAVEN_WEBHOOK_SOURCES` and its `RAVEN_WEBHOOK_SECRET_<NAME>`) — no config file to publish, and it survives `php artisan config:cache`.
+
 ## Processing
 
 Webhook handling is dispatched to a **queued job** so the endpoint responds instantly and the GitHub calls (and their retries) happen in the background. Make sure a queue worker is running:

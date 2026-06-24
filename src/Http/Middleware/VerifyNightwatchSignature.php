@@ -12,9 +12,17 @@ class VerifyNightwatchSignature
 {
     public function handle(Request $request, Closure $next): Response
     {
-        $secret = config('raven.webhook.signing_secret');
+        // A bare /webhooks/nightwatch uses the single shared secret; a
+        // /webhooks/nightwatch/{source} path uses that source's own secret.
+        $source = $request->route('source');
 
-        abort_if(blank($secret), 500, 'Raven webhook signing secret not configured.');
+        if ($source === null) {
+            $secret = config('raven.webhook.signing_secret');
+            abort_if(blank($secret), 500, 'Raven webhook signing secret not configured.');
+        } else {
+            $secret = config('raven.webhook.sources.'.$source);
+            abort_if(blank($secret), 404, 'Unknown Nightwatch webhook source.');
+        }
 
         $expected = hash_hmac('sha256', $request->getContent(), $secret);
 

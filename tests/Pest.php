@@ -13,14 +13,14 @@ uses(TestCase::class, RefreshDatabase::class)->in(__DIR__);
  *
  * @param  array<string, mixed>  $payload
  */
-function postNightwatchWebhook(array $payload, ?string $secret = 'test-secret'): TestResponse
+function postNightwatchWebhook(array $payload, ?string $secret = 'test-secret', ?string $source = null): TestResponse
 {
     $body = json_encode($payload);
     $signature = hash_hmac('sha256', $body, (string) $secret);
 
     return test()->call(
         'POST',
-        '/webhooks/nightwatch',
+        '/webhooks/nightwatch'.($source !== null ? '/'.$source : ''),
         [], [], [],
         [
             'HTTP_NIGHTWATCH_SIGNATURE' => $signature,
