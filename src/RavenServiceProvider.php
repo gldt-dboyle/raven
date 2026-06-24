@@ -5,7 +5,8 @@ declare(strict_types=1);
 namespace Gldt\Raven;
 
 use Gldt\Raven\Contracts\GitHubClient;
-use Gldt\Raven\GitHub\TokenGitHubClient;
+use Gldt\Raven\Contracts\GitHubClientFactory;
+use Gldt\Raven\GitHub\ConfigGitHubClientFactory;
 use Illuminate\Support\ServiceProvider;
 
 class RavenServiceProvider extends ServiceProvider
@@ -14,15 +15,14 @@ class RavenServiceProvider extends ServiceProvider
     {
         $this->mergeConfigFrom(__DIR__.'/../config/raven.php', 'raven');
 
-        $this->app->singleton(GitHubClient::class, function ($app): TokenGitHubClient {
-            $config = $app['config']->get('raven.github');
+        $this->app->singleton(GitHubClientFactory::class, ConfigGitHubClientFactory::class);
 
-            return new TokenGitHubClient(
-                token: $config['token'] ?? null,
-                repository: $config['repository'] ?? null,
-                apiUrl: $config['api_url'] ?? 'https://api.github.com',
-            );
-        });
+        // The bare GitHubClient resolves to the no-source (top-level config)
+        // client, so anything resolving the contract directly still works.
+        $this->app->bind(
+            GitHubClient::class,
+            fn ($app): GitHubClient => $app->make(GitHubClientFactory::class)->for(null),
+        );
     }
 
     public function boot(): void
